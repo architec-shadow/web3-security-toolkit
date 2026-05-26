@@ -45,12 +45,27 @@ jobs:
           cd target_workspace
           slither . --json ../raw_outputs/slither_raw.json || true
 
-      # Ejecución de Aderyn apuntando a la carpeta clonada
+      # 1. Instalar Aderyn nativamente usando Cargo (Rust)
+      - name: Install Aderyn CLI
+        run: |
+          # Instalamos el manejador de paquetes de Rust y luego Aderyn
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          source $HOME/.cargo/env
+          cargo install aderyn
+
+      # 2. Ejecutar Aderyn directamente desde el binario instalado
       - name: Run Aderyn AST Scanner
-        uses: cyfrin/aderyn-action@main
-        with:
-          project_path: 'target_workspace'
-          output_path: 'raw_outputs/aderyn_report.md'
+        run: |
+          source $HOME/.cargo/env
+          # Ejecutamos el binario apuntando a la carpeta clonada
+          aderyn --root target_workspace --output raw_outputs/aderyn_report.md || true
+      
+      # Ejecución de Aderyn apuntando a la carpeta clonada
+      #- name: Run Aderyn AST Scanner
+      #  uses: cyfrin/aderyn-action@main
+      #  with:
+      #    project_path: 'target_workspace'
+      #    output_path: 'raw_outputs/aderyn_report.md'
 
       # Ejecución de tus Parsers locales (si existen en tu repo)
       - name: Run Custom Parsers
