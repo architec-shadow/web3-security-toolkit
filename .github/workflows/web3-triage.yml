@@ -79,14 +79,31 @@ jobs:
           #slither . --json ../raw_outputs/slither_raw.json || true
           slither . --json ../raw_outputs/slither_raw.json
 
-      # Ejecución de Aderyn utilizando su contenedor Docker nativo en el runner
-      - name: Run Aderyn AST Scanner (Dockerizado)
+
+      # Ejecución de Aderyn mediante su binario oficial precompilado (Bypass de Docker)
+      - name: Run Aderyn AST Scanner (Native Binary)
         run: |
-          WORKSPACE_PATH=$(pwd)
-          docker run --rm \
-            -v "$WORKSPACE_PATH/target_workspace":/share \
-            -v "$WORKSPACE_PATH/raw_outputs":/outputs \
-            cyfrin/aderyn:latest --root /share --output /outputs/aderyn_report.md
+          echo "[*] Descargando binario oficial precompilado de Aderyn..."
+          # Descargamos la última versión estable (v0.1.7 o similar) directamente desde sus releases
+          curl -L -o aderyn.tar.gz https://github.com/Cyfrin/aderyn/releases/latest/download/aderyn-x86_64-unknown-linux-gnu.tar.gz
+          
+          echo "[*] Extrayendo el binario..."
+          tar -xzvf aderyn.tar.gz
+          
+          echo "[*] Moviendo binario al PATH del sistema..."
+          sudo mv aderyn /usr/local/bin/
+          
+          echo "[*] Ejecutando escaneo de Aderyn..."
+          aderyn --root target_workspace --output raw_outputs/aderyn_report.md
+          
+      # Ejecución de Aderyn utilizando su contenedor Docker nativo en el runner
+      #- name: Run Aderyn AST Scanner (Dockerizado)
+      #  run: |
+      #    WORKSPACE_PATH=$(pwd)
+      #    docker run --rm \
+      #      -v "$WORKSPACE_PATH/target_workspace":/share \
+      #      -v "$WORKSPACE_PATH/raw_outputs":/outputs \
+      #      cyfrin/aderyn:latest --root /share --output /outputs/aderyn_report.md
 
       
       # 1. Instalar Aderyn nativamente usando Cargo (Rust)
