@@ -47,7 +47,7 @@ jobs:
 
       # Ejecución de Aderyn apuntando a la carpeta clonada
       - name: Run Aderyn AST Scanner
-        uses: cyfrin/aderyn-action@vmain
+        uses: cyfrin/aderyn-action@main
         with:
           project_path: 'target_workspace'
           output_path: 'raw_outputs/aderyn_report.md'
