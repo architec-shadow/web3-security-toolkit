@@ -32,14 +32,27 @@ jobs:
           node-version: '24'
 
       # --- AQUÍ ESTÁ EL PARCHE CRÍTICO ---
+      #- name: Install Foundry (Forge/Cast)
+      #  run: |
+      #    echo "[*] Instalando Foundry/Forge para soporte de compilación..."
+      #    curl -L https://foundry.paradigm.xyz | bash
+      #    # Cargamos Foundry en el PATH del entorno actual de la máquina virtual
+      #    echo "$HOME/.foundry/bin" >> $GITHUB_PATH
+      #    # Inicializamos foundryup para descargar los binarios estables
+      #    $HOME/.foundry/bin/foundryup
+
       - name: Install Foundry (Forge/Cast)
         run: |
-          echo "[*] Instalando Foundry/Forge para soporte de compilación..."
+          echo "[*] Descargando instalador de Foundry..."
           curl -L https://foundry.paradigm.xyz | bash
-          # Cargamos Foundry en el PATH del entorno actual de la máquina virtual
+          
+          echo "[*] Agregando Foundry al PATH del Runner..."
           echo "$HOME/.foundry/bin" >> $GITHUB_PATH
-          # Inicializamos foundryup para descargar los binarios estables
-          $HOME/.foundry/bin/foundryup
+          
+          echo "[*] Ejecutando foundryup nativo..."
+          # Ejecutamos cargando explícitamente el entorno para evitar el error 127
+          export PATH="$HOME/.foundry/bin:$PATH"
+          foundryup
 
       - name: Install Python & Solc-Select
         uses: actions/setup-python@v5
