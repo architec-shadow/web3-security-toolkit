@@ -79,22 +79,37 @@ jobs:
           #slither . --json ../raw_outputs/slither_raw.json || true
           slither . --json ../raw_outputs/slither_raw.json
 
-
-      # Ejecución de Aderyn mediante su binario oficial precompilado (Bypass de Docker)
-      - name: Run Aderyn AST Scanner (Native Binary)
+      # Ejecución de Aderyn mediante su instalador oficial en Bash
+      - name: Run Aderyn AST Scanner (Official Script)
         run: |
-          echo "[*] Descargando binario oficial precompilado de Aderyn..."
-          # Descargamos la última versión estable (v0.1.7 o similar) directamente desde sus releases
-          curl -L -o aderyn.tar.gz https://github.com/Cyfrin/aderyn/releases/latest/download/aderyn-x86_64-unknown-linux-gnu.tar.gz
+          echo "[*] Ejecutando el instalador oficial de Cyfrin Aderyn..."
+          # El script oficial descarga, extrae e instala el binario correcto automáticamente
+          curl -L https://raw.githubusercontent.com/Cyfrin/aderyn/main/cyfrinup/install | bash
           
-          echo "[*] Extrayendo el binario..."
-          tar -xzvf aderyn.tar.gz
-          
-          echo "[*] Moviendo binario al PATH del sistema..."
-          sudo mv aderyn /usr/local/bin/
+          echo "[*] Cargando Aderyn en el PATH del entorno..."
+          # Añadimos el directorio de instalación por defecto al PATH de GitHub Actions
+          echo "$HOME/.local/share/cyfrin/bin" >> $GITHUB_PATH
           
           echo "[*] Ejecutando escaneo de Aderyn..."
+          # Forzamos el PATH en la sub-shell actual para asegurar su ejecución inmediata
+          export PATH="$HOME/.local/share/cyfrin/bin:$PATH"
           aderyn --root target_workspace --output raw_outputs/aderyn_report.md
+      
+      # Ejecución de Aderyn mediante su binario oficial precompilado (Bypass de Docker)
+      #- name: Run Aderyn AST Scanner (Native Binary)
+      #  run: |
+      #    echo "[*] Descargando binario oficial precompilado de Aderyn..."
+      #    # Descargamos la última versión estable (v0.1.7 o similar) directamente desde sus releases
+      #    curl -L -o aderyn.tar.gz https://github.com/Cyfrin/aderyn/releases/latest/download/aderyn-x86_64-unknown-linux-gnu.tar.gz
+      #    
+      #    echo "[*] Extrayendo el binario..."
+      #    tar -xzvf aderyn.tar.gz
+      #    
+      #    echo "[*] Moviendo binario al PATH del sistema..."
+      #    sudo mv aderyn /usr/local/bin/
+      #    
+      #    echo "[*] Ejecutando escaneo de Aderyn..."
+      #    aderyn --root target_workspace --output raw_outputs/aderyn_report.md
           
       # Ejecución de Aderyn utilizando su contenedor Docker nativo en el runner
       #- name: Run Aderyn AST Scanner (Dockerizado)
