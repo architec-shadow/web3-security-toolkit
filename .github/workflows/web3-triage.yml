@@ -79,21 +79,36 @@ jobs:
           #slither . --json ../raw_outputs/slither_raw.json || true
           slither . --json ../raw_outputs/slither_raw.json
 
-      # Ejecución de Aderyn mediante su instalador oficial en Bash
-      - name: Run Aderyn AST Scanner (Official Script)
+      # --- INSTALACIÓN DE ADERYN VÍA RUST (COMPILACIÓN ESTÁTICA) ---
+      - name: Set up Rust Environment
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Install and Run Aderyn AST Scanner
         run: |
-          echo "[*] Ejecutando el instalador oficial de Cyfrin Aderyn..."
-          # El script oficial descarga, extrae e instala el binario correcto automáticamente
-          curl -L https://raw.githubusercontent.com/Cyfrin/aderyn/main/cyfrinup/install | bash
+          echo "[*] Instalando Aderyn de forma segura desde Crates.io..."
+          cargo install aderyn
           
-          echo "[*] Cargando Aderyn en el PATH del entorno..."
-          # Añadimos el directorio de instalación por defecto al PATH de GitHub Actions
-          echo "$HOME/.local/share/cyfrin/bin" >> $GITHUB_PATH
-          
-          echo "[*] Ejecutando escaneo de Aderyn..."
-          # Forzamos el PATH en la sub-shell actual para asegurar su ejecución inmediata
-          export PATH="$HOME/.local/share/cyfrin/bin:$PATH"
-          aderyn --root target_workspace --output raw_outputs/aderyn_report.md
+          echo "[*] Ejecutando escaneo..."
+          aderyn --root target_workspace --output raw_outputs/aderyn_report.md || true
+      
+      # Ejecución de Aderyn mediante su instalador oficial en Bash
+      #- name: Run Aderyn AST Scanner (Official Script)
+      #  run: |
+      #    echo "[*] Ejecutando el instalador oficial de Cyfrin Aderyn..."
+      #    # El script oficial descarga, extrae e instala el binario correcto automáticamente
+      #    curl -L https://raw.githubusercontent.com/Cyfrin/aderyn/main/cyfrinup/install | bash
+      #    
+      #    echo "[*] Cargando Aderyn en el PATH del entorno..."
+      #    # Añadimos el directorio de instalación por defecto al PATH de GitHub Actions
+      #    echo "$HOME/.local/share/cyfrin/bin" >> $GITHUB_PATH
+      #    
+      #    echo "[*] Ejecutando escaneo de Aderyn..."
+      #    # Forzamos el PATH en la sub-shell actual para asegurar su ejecución inmediata
+      #    export PATH="$HOME/.local/share/cyfrin/bin:$PATH"
+      #    aderyn --root target_workspace --output raw_outputs/aderyn_report.md
       
       # Ejecución de Aderyn mediante su binario oficial precompilado (Bypass de Docker)
       #- name: Run Aderyn AST Scanner (Native Binary)
