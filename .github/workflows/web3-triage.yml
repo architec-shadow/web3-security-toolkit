@@ -24,12 +24,25 @@ jobs:
           mkdir -p raw_outputs
           mkdir -p target_workspace
           echo "[*] Clonando repositorio objetivo: ${{ github.event.inputs.target_repo }}"
-          git clone ${{ github.event.inputs.target_repo }} target_workspace
+          #git clone ${{ github.event.inputs.target_repo }} target_workspace
+          gh repo clone ${{ github.event.inputs.target_repo }} target_workspace
+		env:
+		  GH_TOKEN: ${{ github.token }}  
           
       - name: Set up Node.js (Entorno de compilación)
         uses: actions/setup-node@v4
         with:
           node-version: '24'
+
+      # --- AQUÍ ESTÁ EL PARCHE CRÍTICO ---
+      - name: Install Foundry (Forge/Cast)
+        run: |
+          echo "[*] Instalando Foundry/Forge para soporte de compilación..."
+          curl -L https://foundry.paradigm.xyz | bash
+          # Cargamos Foundry en el PATH del entorno actual de la máquina virtual
+          echo "$HOME/.foundry/bin" >> $GITHUB_PATH
+          # Inicializamos foundryup para descargar los binarios estables
+          $HOME/.foundry/bin/foundryup
 
       - name: Install Python & Solc-Select
         uses: actions/setup-python@v5
