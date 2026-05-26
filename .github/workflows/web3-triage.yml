@@ -25,9 +25,6 @@ jobs:
           mkdir -p target_workspace
           echo "[*] Clonando repositorio objetivo: ${{ github.event.inputs.target_repo }}"
           git clone ${{ github.event.inputs.target_repo }} target_workspace
-          #gh repo clone ${{ github.event.inputs.target_repo }} target_workspace
-     	  #env:
-		  #GH_TOKEN: ${{ github.token }}  
           
       - name: Set up Node.js (Entorno de compilación)
         uses: actions/setup-node@v4
