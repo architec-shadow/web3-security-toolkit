@@ -71,6 +71,38 @@ jobs:
           solc-select install latest
           solc-select use latest
 
+      # Forzamos la creación de un contrato vulnerable de control en la raíz para validar los escáneres
+      - name: Create Honeypot Control Contract
+        run: |
+          mkdir -p target_workspace/src
+          cat << 'EOF' > target_workspace/src/VulnerableControl.sol
+          // SPDX-License-Identifier: MIT
+          pragma solidity ^0.8.0;
+
+          contract VulnerableControl {
+              mapping(address => uint) public balances;
+              address public owner;
+
+              constructor() {
+                  owner = msg.sender;
+              }
+
+              // Vulnerabilidad clásica de Reentrancy e Integer Overflow intencionada
+              function withdraw(uint _amount) public {
+                  require(balances[msg.sender] >= _amount);
+                  (bool success, ) = msg.sender.call{value: _amount}("");
+                  require(success);
+                  balances[msg.sender] -= _amount;
+              }
+
+              // TX.ORIGIN para autenticación (Vulnerabilidad de Phishing)
+              function transferOwnership(address _newOwner) public {
+                  require(tx.origin == owner);
+                  owner = _newOwner;
+              }
+          }
+          EOF
+      
       # Ejecución de Slither apuntando a los contratos clonados
       - name: Run Slither Static Analysis
         run: |
