@@ -1,0 +1,69 @@
+name: Web3 Dynamic Triage Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_repo:
+        description: 'URL del repositorio de Smart Contracts del cliente (GitHub)'
+        required: true
+
+jobs:
+  dynamic-audit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Toolkit (Tu Repositorio)
+        uses: actions/checkout@v4
+
+      - name: Create Workspace & Clone Target Repo
+        run: |
+          mkdir -p raw_outputs
+          mkdir -p target_workspace
+          echo "[*] Clonando repositorio objetivo: ${{ github.event.inputs.target_repo }}"
+          git clone ${{ github.event.inputs.target_repo }} target_workspace
+          
+      - name: Set up Node.js (Entorno de compilación)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Python & Solc-Select
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Configure Solidity Compiler
+        run: |
+          pip install solc-select
+          solc-select install latest
+          solc-select use latest
+
+      # Ejecución de Slither apuntando a los contratos clonados
+      - name: Run Slither Static Analysis
+        run: |
+          pip install slither-analyzer
+          cd target_workspace
+          slither . --json ../raw_outputs/slither_raw.json || true
+
+      # Ejecución de Aderyn apuntando a la carpeta clonada
+      - name: Run Aderyn AST Scanner
+        uses: cyfrin/aderyn-action@v1
+        with:
+          project_path: 'target_workspace'
+          output_path: 'raw_outputs/aderyn_report.md'
+
+      # Ejecución de tus Parsers locales (si existen en tu repo)
+      - name: Run Custom Parsers
+        run: |
+          if [ -f ./parsers/json_cleaner.py ]; then
+            python ./parsers/json_cleaner.py
+          fi
+        continue-on-error: true
+
+      # Guardar los reportes generados como ZIP descargable
+      - name: Upload Triage Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: web3-audit-report
+          path: raw_outputs/
+          retention-days: 5
