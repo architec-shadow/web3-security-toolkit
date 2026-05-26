@@ -7,6 +7,10 @@ on:
         description: 'URL del repositorio de Smart Contracts del cliente (GitHub)'
         required: true
 
+# Forzamos globalmente el uso de Node.js 24 en todo este workflow para mitigar la depreciación
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   dynamic-audit:
     runs-on: ubuntu-latest
@@ -25,7 +29,7 @@ jobs:
       - name: Set up Node.js (Entorno de compilación)
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Install Python & Solc-Select
         uses: actions/setup-python@v5
@@ -43,22 +47,33 @@ jobs:
         run: |
           pip install slither-analyzer
           cd target_workspace
-          slither . --json ../raw_outputs/slither_raw.json || true
+          #slither . --json ../raw_outputs/slither_raw.json || true
+          slither . --json ../raw_outputs/slither_raw.json
 
-      # 1. Instalar Aderyn nativamente usando Cargo (Rust)
-      - name: Install Aderyn CLI
+      # Ejecución de Aderyn utilizando su contenedor Docker nativo en el runner
+      - name: Run Aderyn AST Scanner (Dockerizado)
         run: |
-          # Instalamos el manejador de paquetes de Rust y luego Aderyn
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          source $HOME/.cargo/env
-          cargo install aderyn
+          WORKSPACE_PATH=$(pwd)
+          docker run --rm \
+            -v "$WORKSPACE_PATH/target_workspace":/share \
+            -v "$WORKSPACE_PATH/raw_outputs":/outputs \
+            cyfrin/aderyn:latest --root /share --output /outputs/aderyn_report.md
+
+      
+      # 1. Instalar Aderyn nativamente usando Cargo (Rust)
+      #- name: Install Aderyn CLI
+      #  run: |
+      #    # Instalamos el manejador de paquetes de Rust y luego Aderyn
+      #    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+      #    source $HOME/.cargo/env
+      #    cargo install aderyn
 
       # 2. Ejecutar Aderyn directamente desde el binario instalado
-      - name: Run Aderyn AST Scanner
-        run: |
-          source $HOME/.cargo/env
-          # Ejecutamos el binario apuntando a la carpeta clonada
-          aderyn --root target_workspace --output raw_outputs/aderyn_report.md || true
+      #- name: Run Aderyn AST Scanner
+      #  run: |
+      #    source $HOME/.cargo/env
+      #    # Ejecutamos el binario apuntando a la carpeta clonada
+      #    aderyn --root target_workspace --output raw_outputs/aderyn_report.md || true
       
       # Ejecución de Aderyn apuntando a la carpeta clonada
       #- name: Run Aderyn AST Scanner
