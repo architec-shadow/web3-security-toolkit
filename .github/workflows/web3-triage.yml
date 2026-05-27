@@ -126,9 +126,7 @@ jobs:
         run: |
           echo "[*] Ejecutando escaneo en la estructura Foundry del Sandbox..."
           cd ../sandbox
-          #aderyn --root ../sandbox --output ${{ github.workspace }}/raw_outputs/aderyn_report.md || echo "# Aderyn Failed" > ${{ github.workspace }}/raw_outputs/aderyn_report.md    
-		  # La nueva CLI de Aderyn no usa --root. Ejecutar directamente en el directorio genera el reporte.
-          # Aderyn por defecto genera un archivo llamado 'report.md' en el directorio de ejecución.
+          
           aderyn || echo "[!] Aderyn falló en la ejecución"
 
           # Movemos el reporte generado a la carpeta de artefactos final
