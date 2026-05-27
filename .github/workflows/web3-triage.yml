@@ -119,7 +119,8 @@ jobs:
           pip install slither-analyzer
           cd ../sandbox
           # Slither detectará automáticamente que es un proyecto Foundry y usará 'forge' por debajo
-          slither . --json ${{ github.workspace }}/raw_outputs/slither_raw.json --json-indent 4 || echo "[*] Slither finalizó con hallazgos (o errores tolerados)"
+          slither . --json ${{ github.workspace }}/raw_outputs/slither_raw.json || echo "[]" > ${{ github.workspace }}/raw_outputs/slither_raw.json
+          slither . --json ${{ github.workspace }}/raw_outputs/slither_raw.json || echo "[*] Slither finalizó con hallazgos (o errores tolerados)"
 
       # Ejecución de Aderyn apuntando a la raíz del proyecto Foundry estructurado
       - name: Run Aderyn AST Scanner
@@ -139,15 +140,20 @@ jobs:
           
       - name: Run Custom Parsers
         run: |
-          echo "[*] Directorio actual: \$(pwd)"
-          echo "[*] Buscando parsers en ${{ github.workspace }}/parsers/ ..."
-
-          if [ -f "${{ github.workspace }}/parsers/json_cleaner.py" ]; then
-            echo "[+] Parser encontrado. Ejecutando..."
-            python ${{ github.workspace }}/parsers/json_cleaner.py
+		  echo "[*] Buscando 'json_cleaner.py' dinámicamente en el espacio de trabajo..."
+          
+          # Buscamos el archivo en todo el workspace clonado
+          PARSER_PATH=$(find ${{ github.workspace }} -name "json_cleaner.py" | head -n 1)
+          
+          if [ -n "$PARSER_PATH" ]; then
+            echo "[+] Parser encontrado en: $PARSER_PATH"
+            echo "[*] Ejecutando limpiador..."
+            python "$PARSER_PATH"
           else
-            echo "[!] No se encontró json_cleaner.py en ./parsers/. Se omite este paso."
-          fi
+            echo "[!] ERROR: No se encontró 'json_cleaner.py' en ninguna carpeta del repositorio."
+            echo "[*] Estructura actual del workspace para auditoría:"
+            ls -R ${{ github.workspace }}
+          fi	
         continue-on-error: true
        
 
