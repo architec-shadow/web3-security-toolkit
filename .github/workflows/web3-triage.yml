@@ -78,7 +78,8 @@ jobs:
         run: |
           pip install slither-analyzer
           cd ../sandbox
-          slither src/VulnerableControl.sol --json ../raw_outputs/slither_raw.json || echo "[]" > ../raw_outputs/slither_raw.json
+          slither src/VulnerableControl.sol --json ${{ github.workspace }}/raw_outputs/slither_raw.json || echo "[]" > ${{ github.workspace }}/raw_outputs/slither_raw.json
+          #slither src/VulnerableControl.sol --json ../raw_outputs/slither_raw.json || echo "[]" > ../raw_outputs/slither_raw.json
 
       # --- INSTALACIÓN DE ADERYN VÍA RUST (COMPILACIÓN ESTÁTICA) ---
       - name: Set up Rust Environment
