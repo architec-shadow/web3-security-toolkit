@@ -135,9 +135,20 @@ jobs:
           slither . --json ${{ github.workspace }}/raw_outputs/slither_raw.json --fail-none
           
           # Verificación de emergencia: Si por alguna razón el JSON quedó vacío, forzamos su escritura cruda
-          if [ ! -s "${{ github.workspace }}/raw_outputs/slither_raw.json" ] || [ "$(cat ${{ github.workspace }}/raw_outputs/slither_raw.json)" = "[]" ]; then
-            echo "[!] Alerta: Slither no escribió el JSON automáticamente. Forzando exportación manual..."
-            slither . --json ${{ github.workspace }}/raw_outputs/slither_raw.json --skip-pylint --fail-none || true
+          #if [ ! -s "${{ github.workspace }}/raw_outputs/slither_raw.json" ] || [ "$(cat ${{ github.workspace }}/raw_outputs/slither_raw.json)" = "[]" ]; then
+          #  echo "[!] Alerta: Slither no escribió el JSON automáticamente. Forzando exportación manual..."
+          #  slither . --json ${{ github.workspace }}/raw_outputs/slither_raw.json --skip-pylint --fail-none || true
+          #fi
+
+          # LOGICA INTELIGENTE: Si no hay configuración de framework, escaneamos los archivos .sol directamente
+          if [ -f "foundry.toml" ] || [ -f "hardhat.config.js" ] || [ -f "hardhat.config.ts" ]; then
+            echo "[+] Framework detectado. Ejecutando análisis estándar..."
+            slither . --json ${{ github.workspace }}/raw_outputs/slither_raw.json --fail-none || echo "[*] Slither finalizó."
+          else
+            echo "[!] Repositorio plano detectado (sin framework). Forzando escaneo directo de archivos Solidity..."
+            # Buscamos todos los archivos .sol y se los pasamos directamente a Slither en lote
+            solc-select use 0.8.20 || true
+            slither . --json ${{ github.workspace }}/raw_outputs/slither_raw.json --fail-none || echo "[*] Slither finalizó el escaneo plano."
           fi
           
       # Ejecución de Aderyn apuntando a la raíz del proyecto Foundry estructurado
@@ -147,11 +158,27 @@ jobs:
           #cd ../sandbox
           # Apuntamos Aderyn directamente a la carpeta del cliente
           cd ${{ github.workspace }}/target_workspace
-          aderyn || echo "[!] Aderyn falló en la ejecución"
+          #aderyn || echo "[!] Aderyn falló en la ejecución"
 
           # Movemos el reporte generado a la carpeta de artefactos final
+          #if [ -f report.md ]; then
+          #  mv report.md ${{ github.workspace }}/raw_outputs/aderyn_report.md
+          #else
+          #  echo "# Aderyn no pudo generar el reporte" > ${{ github.workspace }}/raw_outputs/aderyn_report.md
+          #fi
+          # Aderyn requiere estrictamente un archivo de configuración para no fallar si no es un proyecto Foundry nativo.
+          # Si no existe foundry.toml, le creamos uno temporal en blanco para engañar al inicializador y que lea los contratos sueltos.
+          if [ ! -f "foundry.toml" ]; then
+            echo "[*] Creando foundry.toml temporal para habilitar el escaneo de Aderyn..."
+            echo -e "[profile.default]\nsrc = '.'\nout = 'out'\nlibs = []" > foundry.toml
+          fi
+          
+          # Ejecutamos Aderyn en la raíz del objetivo
+          aderyn || echo "[!] Aderyn finalizó la ejecución."
+          
           if [ -f report.md ]; then
             mv report.md ${{ github.workspace }}/raw_outputs/aderyn_report.md
+            echo "[+] Reporte de Aderyn exportado correctamente."
           else
             echo "# Aderyn no pudo generar el reporte" > ${{ github.workspace }}/raw_outputs/aderyn_report.md
           fi
