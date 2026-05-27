@@ -140,7 +140,7 @@ jobs:
           
       - name: Run Custom Parsers
         run: |
-		  echo "[*] Buscando 'json_cleaner.py' dinámicamente en el espacio de trabajo..."
+          echo "[*] Buscando 'json_cleaner.py' dinámicamente en el espacio de trabajo..."
           
           # Buscamos el archivo en todo el workspace clonado
           PARSER_PATH=$(find ${{ github.workspace }} -name "json_cleaner.py" | head -n 1)
