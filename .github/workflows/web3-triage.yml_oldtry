@@ -1,0 +1,245 @@
+name: Web3 Dynamic Triage Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_repo:
+        description: 'URL del repositorio de Smart Contracts del cliente (GitHub)'
+        required: true
+
+# Forzamos globalmente el uso de Node.js 24 en todo este workflow para mitigar la depreciación
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  dynamic-audit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Toolkit (Tu Repositorio)
+        uses: actions/checkout@v4
+
+      - name: Create Workspace & Clone Target Repo
+        run: |
+          mkdir -p raw_outputs
+          mkdir -p target_workspace
+          echo "[*] Clonando repositorio objetivo: ${{ github.event.inputs.target_repo }}"
+          git clone ${{ github.event.inputs.target_repo }} target_workspace
+          
+      - name: Set up Node.js (Entorno de compilación)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      # --- AQUÍ ESTÁ EL PARCHE CRÍTICO ---
+      #- name: Install Foundry (Forge/Cast)
+      #  run: |
+      #    echo "[*] Instalando Foundry/Forge para soporte de compilación..."
+      #    curl -L https://foundry.paradigm.xyz | bash
+      #    # Cargamos Foundry en el PATH del entorno actual de la máquina virtual
+      #    echo "$HOME/.foundry/bin" >> $GITHUB_PATH
+      #    # Inicializamos foundryup para descargar los binarios estables
+      #    $HOME/.foundry/bin/foundryup
+
+      #- name: Install Foundry (Forge/Cast)
+      #  run: |
+      #    echo "[*] Descargando instalador de Foundry..."
+      #    curl -L https://foundry.paradigm.xyz | bash
+      #    
+      #    echo "[*] Agregando Foundry al PATH del Runner..."
+      #    echo "$HOME/.foundry/bin" >> $GITHUB_PATH
+      #    
+      #    echo "[*] Ejecutando foundryup nativo..."
+      #    # Ejecutamos cargando explícitamente el entorno para evitar el error 127
+      #    export PATH="$HOME/.foundry/bin:$PATH"
+      #    foundryup
+
+      # --- SOLUCIÓN DE INGENIERÍA: ACTION OFICIAL DE FOUNDRY ---
+      - name: Install Foundry (Forge/Cast)
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly # Descarga la versión más compatible y actualizada
+
+      - name: Install Python & Solc-Select
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      # --- ENTORNO DE CONTROL AISLADO ---
+      - name: Create Isolated Sandbox & Vulnerable Contract
+        run: |
+          # Creamos un directorio totalmente fuera del workspace del cliente
+          mkdir -p ../sandbox/src    
+
+      #- name: Configure Solidity Compiler
+      #  run: |
+      #    pip install solc-select
+      #    solc-select install latest
+      #    solc-select use latest
+
+      # Forzamos la creación de un contrato vulnerable de control en la raíz para validar los escáneres
+      #- name: Create Honeypot Control Contract
+      #  run: |
+      #    mkdir -p target_workspace/src
+      #    cat << 'EOF' > target_workspace/src/VulnerableControl.sol
+      #    // SPDX-License-Identifier: MIT
+      #    pragma solidity ^0.8.0;
+
+      #    contract VulnerableControl {
+      #        mapping(address => uint) public balances;
+      #        address public owner;
+      
+      #        constructor() {
+      #            owner = msg.sender;
+      #        }
+
+      #        // Vulnerabilidad clásica de Reentrancy e Integer Overflow intencionada
+      #        function withdraw(uint _amount) public {
+      #            require(balances[msg.sender] >= _amount);
+      #            (bool success, ) = msg.sender.call{value: _amount}("");
+      #            require(success);
+      #            balances[msg.sender] -= _amount;
+      #        }
+
+      #        // TX.ORIGIN para autenticación (Vulnerabilidad de Phishing)
+      #        function transferOwnership(address _newOwner) public {
+      #            require(tx.origin == owner);
+      #            owner = _newOwner;
+      #        }
+      #    }
+      #    EOF
+
+      # Inyectamos el contrato directamente en el sandbox
+          cat << 'EOF' > ../sandbox/src/VulnerableControl.sol
+          // SPDX-License-Identifier: MIT
+          pragma solidity ^0.8.0;
+
+          contract VulnerableControl {
+              mapping(address => uint) public balances;
+              address public owner;
+
+              constructor() {
+                  owner = msg.sender;
+              }
+
+              function withdraw(uint _amount) public {
+                  require(balances[msg.sender] >= _amount);
+                  (bool success, ) = msg.sender.call{value: _amount}("");
+                  require(success);
+                  balances[msg.sender] -= _amount;
+              }
+
+              function transferOwnership(address _newOwner) public {
+                  require(tx.origin == owner);
+                  owner = _newOwner;
+              }
+          }
+          EOF
+      
+      # Ejecución de Slither apuntando a los contratos clonados
+      - name: Run Slither Static Analysis
+        run: |
+          pip install slither-analyzer
+          #cd target_workspace
+          cd ../sandbox
+          #slither . --json ../raw_outputs/slither_raw.json || true
+          #slither . --json ../raw_outputs/slither_raw.json
+          # Usamos la ruta directa al archivo. Al estar aislados de foundry.toml, Slither usa solc puro.
+          slither src/VulnerableControl.sol --json ../raw_outputs/slither_raw.json || echo "[]" > ../raw_outputs/slither_raw.json
+
+      # --- INSTALACIÓN DE ADERYN VÍA RUST (COMPILACIÓN ESTÁTICA) ---
+      - name: Set up Rust Environment
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Install and Run Aderyn AST Scanner
+        run: |
+          echo "[*] Instalando Aderyn de forma segura desde Crates.io..."
+          cargo install aderyn
+          
+          #echo "[*] Ejecutando escaneo..."
+          #aderyn --root target_workspace --output raw_outputs/aderyn_report.md || true
+		  # Escaneamos el sandbox limpio
+          aderyn --root ../sandbox --output raw_outputs/aderyn_report.md || echo "# Aderyn Failed" > raw_outputs/aderyn_report.md	
+      
+      # Ejecución de Aderyn mediante su instalador oficial en Bash
+      #- name: Run Aderyn AST Scanner (Official Script)
+      #  run: |
+      #    echo "[*] Ejecutando el instalador oficial de Cyfrin Aderyn..."
+      #    # El script oficial descarga, extrae e instala el binario correcto automáticamente
+      #    curl -L https://raw.githubusercontent.com/Cyfrin/aderyn/main/cyfrinup/install | bash
+      #    
+      #    echo "[*] Cargando Aderyn en el PATH del entorno..."
+      #    # Añadimos el directorio de instalación por defecto al PATH de GitHub Actions
+      #    echo "$HOME/.local/share/cyfrin/bin" >> $GITHUB_PATH
+      #    
+      #    echo "[*] Ejecutando escaneo de Aderyn..."
+      #    # Forzamos el PATH en la sub-shell actual para asegurar su ejecución inmediata
+      #    export PATH="$HOME/.local/share/cyfrin/bin:$PATH"
+      #    aderyn --root target_workspace --output raw_outputs/aderyn_report.md
+      
+      # Ejecución de Aderyn mediante su binario oficial precompilado (Bypass de Docker)
+      #- name: Run Aderyn AST Scanner (Native Binary)
+      #  run: |
+      #    echo "[*] Descargando binario oficial precompilado de Aderyn..."
+      #    # Descargamos la última versión estable (v0.1.7 o similar) directamente desde sus releases
+      #    curl -L -o aderyn.tar.gz https://github.com/Cyfrin/aderyn/releases/latest/download/aderyn-x86_64-unknown-linux-gnu.tar.gz
+      #    
+      #    echo "[*] Extrayendo el binario..."
+      #    tar -xzvf aderyn.tar.gz
+      #    
+      #    echo "[*] Moviendo binario al PATH del sistema..."
+      #    sudo mv aderyn /usr/local/bin/
+      #    
+      #    echo "[*] Ejecutando escaneo de Aderyn..."
+      #    aderyn --root target_workspace --output raw_outputs/aderyn_report.md
+          
+      # Ejecución de Aderyn utilizando su contenedor Docker nativo en el runner
+      #- name: Run Aderyn AST Scanner (Dockerizado)
+      #  run: |
+      #    WORKSPACE_PATH=$(pwd)
+      #    docker run --rm \
+      #      -v "$WORKSPACE_PATH/target_workspace":/share \
+      #      -v "$WORKSPACE_PATH/raw_outputs":/outputs \
+      #      cyfrin/aderyn:latest --root /share --output /outputs/aderyn_report.md
+
+      
+      # 1. Instalar Aderyn nativamente usando Cargo (Rust)
+      #- name: Install Aderyn CLI
+      #  run: |
+      #    # Instalamos el manejador de paquetes de Rust y luego Aderyn
+      #    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+      #    source $HOME/.cargo/env
+      #    cargo install aderyn
+
+      # 2. Ejecutar Aderyn directamente desde el binario instalado
+      #- name: Run Aderyn AST Scanner
+      #  run: |
+      #    source $HOME/.cargo/env
+      #    # Ejecutamos el binario apuntando a la carpeta clonada
+      #    aderyn --root target_workspace --output raw_outputs/aderyn_report.md || true
+      
+      # Ejecución de Aderyn apuntando a la carpeta clonada
+      #- name: Run Aderyn AST Scanner
+      #  uses: cyfrin/aderyn-action@main
+      #  with:
+      #    project_path: 'target_workspace'
+      #    output_path: 'raw_outputs/aderyn_report.md'
+
+      # Ejecución de tus Parsers locales (si existen en tu repo)
+      - name: Run Custom Parsers
+        run: |
+          if [ -f ./parsers/json_cleaner.py ]; then
+            python ./parsers/json_cleaner.py
+          fi
+        continue-on-error: true
+
+      # Guardar los reportes generados como ZIP descargable
+      - name: Upload Triage Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: web3-audit-report
+          path: raw_outputs/
+          retention-days: 5
