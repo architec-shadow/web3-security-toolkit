@@ -7,7 +7,6 @@ on:
         description: 'URL del repositorio de Smart Contracts del cliente (GitHub)'
         required: true
 
-# Forzamos globalmente el uso de Node.js 24 en todo este workflow para mitigar depreciaciones
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
@@ -31,18 +30,56 @@ jobs:
         with:
           node-version: '24'
 
-      # --- SOLUCIÓN DE INGENIERÍA: ACTION OFICIAL DE FOUNDRY ---
       - name: Install Foundry (Forge/Cast)
         uses: foundry-rs/foundry-toolchain@v1
         with:
           version: nightly
 
-      # --- ENTORNO DE CONTROL AISLADO ---
+      # --- NUEVO: SISTEMA DE CACHÉ OPTIMIZADO PARA RUST/CARGO ---
+      - name: Rust Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+            /home/runner/.cargo/bin/aderyn
+          key: ${{ runner.os }}-cargo-aderyn-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-aderyn-
+
+      - name: Set up Rust Environment
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Install Aderyn (Utiliza Caché si existe)
+        run: |
+          if command -v aderyn &> /dev/null; then
+            echo "[+] Aderyn ya está instalado (Restaurado desde Caché)."
+          else
+            echo "[*] Instalando Aderyn desde Crates.io..."
+            cargo install aderyn
+          fi
+
+      # --- ENTORNO DE CONTROL ANIDADO COMO PROYECTO FOUNDRY ---
       - name: Create Isolated Sandbox & Vulnerable Contract
         run: |
-          mkdir -p ../sandbox/src    
+          # Nos movemos un nivel arriba y creamos una estructura real de Foundry
+          cd ..
+          mkdir -p sandbox
+          cd sandbox
           
-          cat << 'EOF' > ../sandbox/src/VulnerableControl.sol
+          # Inicializamos un proyecto vacío de Forge sin hacer commits de git
+          forge init --no-commit --no-git --force
+          
+          # Limpiamos los contratos de ejemplo que genera forge por defecto
+          rm -f src/Counter.sol test/Counter.t.sol script/Counter.s.sol
+          
+          # Inyectamos nuestro honeypot de control en la ruta correcta del framework
+          cat << 'EOF' > src/VulnerableControl.sol
           // SPDX-License-Identifier: MIT
           pragma solidity ^0.8.0;
 
@@ -67,36 +104,29 @@ jobs:
               }
           }
           EOF
-      
+          
+          # Forzamos una compilación previa para verificar que el entorno funciona
+          forge build
+
       - name: Install Python & Solc-Select
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      # Ejecución de Slither apuntando a los contratos en el Sandbox
+      # Ejecución de Slither apuntando al proyecto Foundry estructurado
       - name: Run Slither Static Analysis
         run: |
           pip install slither-analyzer
           cd ../sandbox
-          slither src/VulnerableControl.sol --json ${{ github.workspace }}/raw_outputs/slither_raw.json || echo "[]" > ${{ github.workspace }}/raw_outputs/slither_raw.json
-          #slither src/VulnerableControl.sol --json ../raw_outputs/slither_raw.json || echo "[]" > ../raw_outputs/slither_raw.json
+          # Slither detectará automáticamente que es un proyecto Foundry y usará 'forge' por debajo
+          slither . --json ${{ github.workspace }}/raw_outputs/slither_raw.json || echo "[]" > ${{ github.workspace }}/raw_outputs/slither_raw.json
 
-      # --- INSTALACIÓN DE ADERYN VÍA RUST (COMPILACIÓN ESTÁTICA) ---
-      - name: Set up Rust Environment
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-
-      - name: Install and Run Aderyn AST Scanner
+      # Ejecución de Aderyn apuntando a la raíz del proyecto Foundry estructurado
+      - name: Run Aderyn AST Scanner
         run: |
-          echo "[*] Instalando Aderyn de forma segura desde Crates.io..."
-          cargo install aderyn
-          
-          echo "[*] Ejecutando escaneo en el Sandbox..."
-          aderyn --root ../sandbox --output raw_outputs/aderyn_report.md || echo "# Aderyn Failed" > raw_outputs/aderyn_report.md    
+          echo "[*] Ejecutando escaneo en la estructura Foundry del Sandbox..."
+          aderyn --root ../sandbox --output ${{ github.workspace }}/raw_outputs/aderyn_report.md || echo "# Aderyn Failed" > ${{ github.workspace }}/raw_outputs/aderyn_report.md    
       
-      # Ejecución de Parsers locales personalizados
       - name: Run Custom Parsers
         run: |
           if [ -f ./parsers/json_cleaner.py ]; then
@@ -104,7 +134,6 @@ jobs:
           fi
         continue-on-error: true
 
-      # Guardar los reportes generados como ZIP descargable
       - name: Upload Triage Artifacts
         uses: actions/upload-artifact@v4
         with:
