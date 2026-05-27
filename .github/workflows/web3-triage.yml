@@ -119,20 +119,39 @@ jobs:
           pip install slither-analyzer
           cd ../sandbox
           # Slither detectará automáticamente que es un proyecto Foundry y usará 'forge' por debajo
-          slither . --json ${{ github.workspace }}/raw_outputs/slither_raw.json || echo "[]" > ${{ github.workspace }}/raw_outputs/slither_raw.json
+          slither . --json ${{ github.workspace }}/raw_outputs/slither_raw.json --json-indent 4 || echo "[*] Slither finalizó con hallazgos (o errores tolerados)"
 
       # Ejecución de Aderyn apuntando a la raíz del proyecto Foundry estructurado
       - name: Run Aderyn AST Scanner
         run: |
           echo "[*] Ejecutando escaneo en la estructura Foundry del Sandbox..."
-          aderyn --root ../sandbox --output ${{ github.workspace }}/raw_outputs/aderyn_report.md || echo "# Aderyn Failed" > ${{ github.workspace }}/raw_outputs/aderyn_report.md    
-      
+          cd ../sandbox
+          #aderyn --root ../sandbox --output ${{ github.workspace }}/raw_outputs/aderyn_report.md || echo "# Aderyn Failed" > ${{ github.workspace }}/raw_outputs/aderyn_report.md    
+		  # La nueva CLI de Aderyn no usa --root. Ejecutar directamente en el directorio genera el reporte.
+          # Aderyn por defecto genera un archivo llamado 'report.md' en el directorio de ejecución.
+          aderyn || echo "[!] Aderyn falló en la ejecución"
+
+          # Movemos el reporte generado a la carpeta de artefactos final
+          if [ -f report.md ]; then
+            mv report.md ${{ github.workspace }}/raw_outputs/aderyn_report.md
+          else
+            echo "# Aderyn no pudo generar el reporte" > ${{ github.workspace }}/raw_outputs/aderyn_report.md
+          fi
+
+          
       - name: Run Custom Parsers
         run: |
-          if [ -f ./parsers/json_cleaner.py ]; then
-            python ./parsers/json_cleaner.py
+          echo "[*] Directorio actual: \$(pwd)"
+          echo "[*] Buscando parsers en ${{ github.workspace }}/parsers/ ..."
+
+          if [ -f "${{ github.workspace }}/parsers/json_cleaner.py" ]; then
+            echo "[+] Parser encontrado. Ejecutando..."
+            python ${{ github.workspace }}/parsers/json_cleaner.py
+          else
+            echo "[!] No se encontró json_cleaner.py en ./parsers/. Se omite este paso."
           fi
         continue-on-error: true
+       
 
       - name: Upload Triage Artifacts
         uses: actions/upload-artifact@v4
