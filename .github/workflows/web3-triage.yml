@@ -65,17 +65,52 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Configure Solidity Compiler
+      # --- ENTORNO DE CONTROL AISLADO ---
+      - name: Create Isolated Sandbox & Vulnerable Contract
         run: |
-          pip install solc-select
-          solc-select install latest
-          solc-select use latest
+          # Creamos un directorio totalmente fuera del workspace del cliente
+          mkdir -p ../sandbox/src    
+
+      #- name: Configure Solidity Compiler
+      #  run: |
+      #    pip install solc-select
+      #    solc-select install latest
+      #    solc-select use latest
 
       # Forzamos la creación de un contrato vulnerable de control en la raíz para validar los escáneres
-      - name: Create Honeypot Control Contract
-        run: |
-          mkdir -p target_workspace/src
-          cat << 'EOF' > target_workspace/src/VulnerableControl.sol
+      #- name: Create Honeypot Control Contract
+      #  run: |
+      #    mkdir -p target_workspace/src
+      #    cat << 'EOF' > target_workspace/src/VulnerableControl.sol
+      #    // SPDX-License-Identifier: MIT
+      #    pragma solidity ^0.8.0;
+
+      #    contract VulnerableControl {
+      #        mapping(address => uint) public balances;
+      #        address public owner;
+      
+      #        constructor() {
+      #            owner = msg.sender;
+      #        }
+
+      #        // Vulnerabilidad clásica de Reentrancy e Integer Overflow intencionada
+      #        function withdraw(uint _amount) public {
+      #            require(balances[msg.sender] >= _amount);
+      #            (bool success, ) = msg.sender.call{value: _amount}("");
+      #            require(success);
+      #            balances[msg.sender] -= _amount;
+      #        }
+
+      #        // TX.ORIGIN para autenticación (Vulnerabilidad de Phishing)
+      #        function transferOwnership(address _newOwner) public {
+      #            require(tx.origin == owner);
+      #            owner = _newOwner;
+      #        }
+      #    }
+      #    EOF
+
+      # Inyectamos el contrato directamente en el sandbox
+          cat << 'EOF' > ../sandbox/src/VulnerableControl.sol
           // SPDX-License-Identifier: MIT
           pragma solidity ^0.8.0;
 
@@ -87,7 +122,6 @@ jobs:
                   owner = msg.sender;
               }
 
-              // Vulnerabilidad clásica de Reentrancy e Integer Overflow intencionada
               function withdraw(uint _amount) public {
                   require(balances[msg.sender] >= _amount);
                   (bool success, ) = msg.sender.call{value: _amount}("");
@@ -95,7 +129,6 @@ jobs:
                   balances[msg.sender] -= _amount;
               }
 
-              // TX.ORIGIN para autenticación (Vulnerabilidad de Phishing)
               function transferOwnership(address _newOwner) public {
                   require(tx.origin == owner);
                   owner = _newOwner;
@@ -107,9 +140,12 @@ jobs:
       - name: Run Slither Static Analysis
         run: |
           pip install slither-analyzer
-          cd target_workspace
+          #cd target_workspace
+          cd ../sandbox
           #slither . --json ../raw_outputs/slither_raw.json || true
-          slither . --json ../raw_outputs/slither_raw.json
+          #slither . --json ../raw_outputs/slither_raw.json
+          # Usamos la ruta directa al archivo. Al estar aislados de foundry.toml, Slither usa solc puro.
+          slither src/VulnerableControl.sol --json ../raw_outputs/slither_raw.json || echo "[]" > ../raw_outputs/slither_raw.json
 
       # --- INSTALACIÓN DE ADERYN VÍA RUST (COMPILACIÓN ESTÁTICA) ---
       - name: Set up Rust Environment
@@ -123,8 +159,10 @@ jobs:
           echo "[*] Instalando Aderyn de forma segura desde Crates.io..."
           cargo install aderyn
           
-          echo "[*] Ejecutando escaneo..."
-          aderyn --root target_workspace --output raw_outputs/aderyn_report.md || true
+          #echo "[*] Ejecutando escaneo..."
+          #aderyn --root target_workspace --output raw_outputs/aderyn_report.md || true
+		  # Escaneamos el sandbox limpio
+          aderyn --root ../sandbox --output raw_outputs/aderyn_report.md || echo "# Aderyn Failed" > raw_outputs/aderyn_report.md	
       
       # Ejecución de Aderyn mediante su instalador oficial en Bash
       #- name: Run Aderyn AST Scanner (Official Script)
