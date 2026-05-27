@@ -117,11 +117,27 @@ jobs:
       - name: Run Slither Static Analysis
         run: |
           pip install slither-analyzer
+          
+          # Forzamos a solc-select a instalar y usar la versión exacta del contrato
+          pip install solc-select
+          solc-select install 0.8.20 || true
+          solc-select use 0.8.20 || true
+          
           cd ../sandbox
-          # Slither detectará automáticamente que es un proyecto Foundry y usará 'forge' por debajo
-          slither . --json ${{ github.workspace }}/raw_outputs/slither_raw.json || echo "[]" > ${{ github.workspace }}/raw_outputs/slither_raw.json
-          slither . --json ${{ github.workspace }}/raw_outputs/slither_raw.json || echo "[*] Slither finalizó con hallazgos (o errores tolerados)"
-
+          
+          # Limpiamos artefactos previos de Forge para obligar una recompilación limpia dentro de Slither
+          forge clean
+          
+          # Ejecutamos Slither con rutas absolutas nativas
+          # Agregamos '--sarif' temporalmente además del JSON como respaldo por si el formateador JSON nativo se corrompe
+          slither . --json ${{ github.workspace }}/raw_outputs/slither_raw.json --fail-none
+          
+          # Verificación de emergencia: Si por alguna razón el JSON quedó vacío, forzamos su escritura cruda
+          if [ ! -s "${{ github.workspace }}/raw_outputs/slither_raw.json" ] || [ "$(cat ${{ github.workspace }}/raw_outputs/slither_raw.json)" = "[]" ]; then
+            echo "[!] Alerta: Slither no escribió el JSON automáticamente. Forzando exportación manual..."
+            slither . --json ${{ github.workspace }}/raw_outputs/slither_raw.json --skip-pylint --fail-none || true
+          fi
+          
       # Ejecución de Aderyn apuntando a la raíz del proyecto Foundry estructurado
       - name: Run Aderyn AST Scanner
         run: |
