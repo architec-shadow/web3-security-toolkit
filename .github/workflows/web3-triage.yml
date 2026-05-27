@@ -65,48 +65,48 @@ jobs:
           fi
 
       # --- ENTORNO DE CONTROL ANIDADO COMO PROYECTO FOUNDRY ---
-      - name: Create Isolated Sandbox & Vulnerable Contract
-        run: |
-          # Nos movemos un nivel arriba y creamos una estructura real de Foundry
-          cd ..
-          mkdir -p sandbox
-          cd sandbox
+      #- name: Create Isolated Sandbox & Vulnerable Contract
+      #  run: |
+      #    # Nos movemos un nivel arriba y creamos una estructura real de Foundry
+      #    cd ..
+      #    mkdir -p sandbox
+      #    cd sandbox
           
           # Inicializamos un proyecto vacío de Forge sin hacer commits de git
-          forge init --no-commit --no-git --force
+      #    forge init --no-commit --no-git --force
           
           # Limpiamos los contratos de ejemplo que genera forge por defecto
-          rm -f src/Counter.sol test/Counter.t.sol script/Counter.s.sol
+      #    rm -f src/Counter.sol test/Counter.t.sol script/Counter.s.sol
           
           # Inyectamos nuestro honeypot de control en la ruta correcta del framework
-          cat << 'EOF' > src/VulnerableControl.sol
-          // SPDX-License-Identifier: MIT
-          pragma solidity ^0.8.0;
+      #    cat << 'EOF' > src/VulnerableControl.sol
+      #    // SPDX-License-Identifier: MIT
+      #    pragma solidity ^0.8.0;
 
-          contract VulnerableControl {
-              mapping(address => uint) public balances;
-              address public owner;
+      #    contract VulnerableControl {
+      #        mapping(address => uint) public balances;
+      #        address public owner;
 
-              constructor() {
-                  owner = msg.sender;
-              }
+      #        constructor() {
+      #            owner = msg.sender;
+      #        }
 
-              function withdraw(uint _amount) public {
-                  require(balances[msg.sender] >= _amount);
-                  (bool success, ) = msg.sender.call{value: _amount}("");
-                  require(success);
-                  balances[msg.sender] -= _amount;
-              }
+      #        function withdraw(uint _amount) public {
+      #            require(balances[msg.sender] >= _amount);
+      #            (bool success, ) = msg.sender.call{value: _amount}("");
+      #            require(success);
+      #            balances[msg.sender] -= _amount;
+      #        }
 
-              function transferOwnership(address _newOwner) public {
-                  require(tx.origin == owner);
-                  owner = _newOwner;
-              }
-          }
-          EOF
+      #        function transferOwnership(address _newOwner) public {
+      #            require(tx.origin == owner);
+      #            owner = _newOwner;
+      #        }
+      #    }
+      #    EOF
           
           # Forzamos una compilación previa para verificar que el entorno funciona
-          forge build
+      #    forge build
 
       - name: Install Python & Solc-Select
         uses: actions/setup-python@v5
@@ -123,7 +123,9 @@ jobs:
           solc-select install 0.8.20 || true
           solc-select use 0.8.20 || true
           
-          cd ../sandbox
+          #cd ../sandbox
+          # Nos paramos directamente en el repositorio clonado del cliente
+          cd ${{ github.workspace }}/target_workspace
           
           # Limpiamos artefactos previos de Forge para obligar una recompilación limpia dentro de Slither
           forge clean
@@ -142,8 +144,9 @@ jobs:
       - name: Run Aderyn AST Scanner
         run: |
           echo "[*] Ejecutando escaneo en la estructura Foundry del Sandbox..."
-          cd ../sandbox
-          
+          #cd ../sandbox
+          # Apuntamos Aderyn directamente a la carpeta del cliente
+          cd ${{ github.workspace }}/target_workspace
           aderyn || echo "[!] Aderyn falló en la ejecución"
 
           # Movemos el reporte generado a la carpeta de artefactos final
